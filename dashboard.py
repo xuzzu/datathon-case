@@ -63,20 +63,9 @@ def load_population():
 
 
 @st.cache_data
-def generate_forecasts(df_population, periods=5):
-    forecast_results = []
-    regions = df_population['Region'].unique()
-
-    for region in regions:
-        region_data = df_population[df_population['Region'] == region].copy()
-        forecast_df = forecast_population_prophet(region_data, periods)
-        forecast_df['Region'] = region
-        forecast_df['Year'] = forecast_df['ds'].dt.year
-        forecast_results.append(forecast_df)
-
-    df_forecast = pd.concat(forecast_results, ignore_index=True)
-    df_forecast.rename(columns={'yhat': 'Population Forecast'}, inplace=True)
-    df_forecast.drop(columns=['ds'], inplace=True)
+def generate_forecasts():
+    # load from csv
+    df_forecast = pd.read_csv('population_forecast.csv')
     return df_forecast
 
 def forecast_investment_gap(region_df, periods=5):
@@ -86,6 +75,7 @@ def forecast_investment_gap(region_df, periods=5):
     forecast = model.predict(future)
     forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
     forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
+    forecast_df.to_csv('invetment_gap_forecast.csv')
     return forecast_df
 
 @st.cache_data
@@ -98,7 +88,7 @@ def merge_data(df_forecast, df_population):
 
 if __name__ == "__main__":
     df_population = load_population()
-    df_forecast = generate_forecasts(df_population)
+    df_forecast = generate_forecasts()
     df_combined = merge_data(df_forecast, df_population)
 
     st.title("Демографические тренды регионов Казахстана")
@@ -128,7 +118,6 @@ if __name__ == "__main__":
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
-
         region_data = df_combined[df_combined['Region'] == selected_region].sort_values('Year')
 
         fig = go.Figure()
