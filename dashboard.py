@@ -10,7 +10,6 @@ from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(layout="wide")
 
-# Function to forecast population using Prophet
 def forecast_population_prophet(region_df, periods=5):
     model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
     model.fit(region_df[['ds', 'y']])
@@ -20,11 +19,9 @@ def forecast_population_prophet(region_df, periods=5):
     forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
     return forecast_df
 
-# Load the processed data
 @st.cache_data
 def load_data():
-    # Replace 'infrastructure_data_processed.xlsx' with your actual file path
-    df = pd.read_excel('everything.xlsx')  # Update this path accordingly
+    df = pd.read_excel('everything.xlsx')  
     df_long = df.melt(id_vars=['Область', 'Показатель'],
                       var_name='Год',
                       value_name='Значение')
@@ -41,8 +38,7 @@ def load_data():
 
 @st.cache_data
 def load_population():
-    # Replace 'infrastructure_data_processed.xlsx' with your actual file path
-    df = pd.read_excel('everything.xlsx')  # Update this path accordingly
+    df = pd.read_excel('everything.xlsx')  
     df_long = df.melt(id_vars=['Область', 'Показатель'],
                       var_name='Год',
                       value_name='Значение')
@@ -55,21 +51,18 @@ def load_population():
     df_pivot = df_long.pivot_table(index=['Region', 'Year'],
                                    columns='Indicator',
                                    values='Value').reset_index()
-    # Prepare the population data
-    population_indicator = 'Население'  # Replace with the exact column name if different
+    population_indicator = 'Население'  
     df_population = df_pivot[['Region', 'Year', population_indicator]].copy()
     df_population.rename(columns={'Year': 'ds', population_indicator: 'y'}, inplace=True)
     df_population['ds'] = pd.to_datetime(df_population['ds'], format='%Y')
     df_population['Year'] = df_population['ds'].dt.year
 
-    # Remove duplicates
     df_population = df_population.drop_duplicates(subset=['Region', 'Year'])
 
     return df_population
 
 df_population = load_population()
 
-# Forecasting for Все
 @st.cache_data
 def generate_forecasts(df_population, periods=5):
     forecast_results = []
@@ -87,19 +80,17 @@ def generate_forecasts(df_population, periods=5):
     df_forecast.drop(columns=['ds'], inplace=True)
     return df_forecast
 
-# Function to forecast investment gap using Prophet
 def forecast_investment_gap(region_df, periods=5):
     model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
     model.fit(region_df[['ds', 'y']])
     future = model.make_future_dataframe(periods=periods, freq='Y')
     forecast = model.predict(future)
-    forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy() # Keep confidence intervals
+    forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
     forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
     return forecast_df
 
 df_forecast = generate_forecasts(df_population)
 
-# Merge historical and forecasted data
 @st.cache_data
 def merge_data(df_forecast, df_population):
     df_combined = df_forecast.merge(df_population, on=['Region', 'Year'], how='left')
@@ -110,15 +101,13 @@ def merge_data(df_forecast, df_population):
 
 df_combined = merge_data(df_forecast, df_population)
 
-# Streamlit App Layout
 st.title("Демографические тренды регионов Казахстана")
 st.write("Изменение населения играет важную роль в развитии регионов. Мы использовали простую модель прогнозирования для предсказания населения на будущие 5 лет (пакет prophet в Python). "
          "Существуют аномалии в виде областей которые были разделены в 2020-ых годах.")
 
-# Sidebar for region selection and "Все" option
 st.sidebar.header("Выбрать регион")
 regions = df_combined['Region'].unique().tolist()
-regions.insert(0, "Все")  # Add "Все" option at the beginning
+regions.insert(0, "Все")  
 selected_region = st.sidebar.selectbox("Region", regions)
 
 
@@ -130,7 +119,7 @@ if selected_region == "Все":
             x=region_data['Year'],
             y=region_data['Population'],
             mode='lines+markers',
-            name=region,  # Display region name in legend
+            name=region,  
         ))
     fig.update_layout(
         title='Статистика населения по всем регионам',
@@ -140,13 +129,11 @@ if selected_region == "Все":
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
-    # Filter data for the selected region
+
     region_data = df_combined[df_combined['Region'] == selected_region].sort_values('Year')
 
-    # Create the plot
     fig = go.Figure()
 
-    # Historical data
     historical = region_data[region_data['Type'] == 'Historical']
     fig.add_trace(go.Scatter(
         x=historical['Year'],
@@ -156,7 +143,6 @@ else:
         line=dict(color='blue')
     ))
 
-    # Forecasted data
     forecast = region_data[region_data['Type'] == 'Forecast']
     fig.add_trace(go.Scatter(
         x=forecast['Year'],
@@ -166,7 +152,6 @@ else:
         line=dict(color='red', dash='dash')
     ))
 
-    # Confidence intervals (optional)
     fig.add_trace(go.Scatter(
         x=forecast['Year'],
         y=forecast['Population Forecast'] + (forecast['Population Forecast'] * 0.05),  # Example upper bound
@@ -187,7 +172,6 @@ else:
         showlegend=False
     ))
 
-    # Update layout
     fig.update_layout(
         title=f'Статистика населения для {selected_region}',
         xaxis_title='Year',
@@ -195,15 +179,12 @@ else:
         hovermode='x unified'
     )
 
-    # Display the plot
     st.plotly_chart(fig, use_container_width=True)
 
-    # Display forecast details
     st.subheader("Forecast Details")
     if not forecast.empty:
         st.write(forecast[['Year', 'Population Forecast']])
 
-    # Optionally, display raw data
     if st.checkbox("Show Raw Data"):
         st.subheader("Historical Population Data")
         st.write(historical[['Year', 'Population']])
@@ -211,7 +192,6 @@ else:
         st.subheader("Forecasted Population Data")
         st.write(forecast[['Year', 'Population Forecast']])
 
-# Investment Gap Line Chart with Forecast
 st.subheader("Инвестиционный разрыв и Износ")
 st.write("Мы решили ввести переменную, которую назвали Инвестиционный разрыв. Это показатель, который показывает разницу между инвестициями в основной капитал и суммой износа."
          "В свою очередь, сумма износа считается по формуле <<Наличие основных средств (начальная стоимость) * степень износа>>. "
@@ -222,7 +202,6 @@ st.write("Мы решили ввести переменную, которую н
 col1, col2 = st.columns(2)
 df_pivot = load_data()
 
-# OLS Model Fitting
 features = [
     'Население', 'Зарплата', 'Безработица', 'Сальдо миграции', 'Износ',
     'Доля ВВП', 'ВРП Промышленность', 'ВРП Энергия'
@@ -255,14 +234,14 @@ if selected_region == "Все":
             forecast_gap['Year'] = forecast_gap['ds'].dt.year
 
             fig_gap_all.add_trace(go.Scatter(
-                x=forecast_gap['Year'],  # Use the full forecast data for x
-                y=forecast_gap['yhat'],  # Use 'yhat' for both historical and forecast
+                x=forecast_gap['Year'],  
+                y=forecast_gap['yhat'],  
                 mode='lines+markers',
-                name=region # Add region name to legend
+                name=region
             ))
 
     fig_gap_all.update_layout(
-        title='Инвестиционный разрыв',  # Update title
+        title='Инвестиционный разрыв', 
         xaxis_title='Год',
         yaxis_title='Инвестиционный разрыв (mln KZT)',
         hovermode='x unified'
@@ -271,18 +250,18 @@ if selected_region == "Все":
         st.plotly_chart(fig_gap_all, use_container_width=True)
 
     fig_iznos_all = go.Figure()
-    for region in df_pivot['Region'].unique(): # Iterate through regions for Iznos
+    for region in df_pivot['Region'].unique(): 
         region_data_iznos = df_pivot[df_pivot['Region'] == region].copy()
 
         fig_iznos_all.add_trace(go.Scatter(
             x=region_data_iznos['Year'],
             y=region_data_iznos['Износ'],
             mode='lines+markers',
-            name=f"{region} - Износ" # Distinguish regions in the legend
+            name=f"{region} - Износ" 
         ))
 
     fig_iznos_all.update_layout(
-        title='Износ', # Updated title
+        title='Износ', 
         xaxis_title='Год',
         yaxis_title='Износ (%)',
         hovermode='x unified'
@@ -292,7 +271,6 @@ if selected_region == "Все":
 else:
     region_ols_data = ols_data[ols_data['Region'] == selected_region].copy()
 
-    # Forecast features (Example using rolling mean - replace with your preferred method)
     for feature in features:
         region_ols_data[feature + '_forecast'] = region_ols_data[feature].rolling(window=3, center=True).mean().shift(-1)
 
@@ -330,40 +308,37 @@ else:
     fig_iznos = go.Figure()
     fig_iznos.add_trace(go.Scatter(
         x=region_ols_data['Year'],
-        y=region_ols_data['Износ'],  # Plot historical "Износ"
+        y=region_ols_data['Износ'],  
         mode='lines+markers',
         name='Исторический износ',
-        line=dict(color='purple')  # Example color
+        line=dict(color='purple')  
     ))
 
-    # Forecast "Износ" - replace with your actual method
-    iznos_forecast = region_ols_data['Износ'].rolling(window=3, center=True).mean().shift(-1)  # Example forecast
+    iznos_forecast = region_ols_data['Износ'].rolling(window=3, center=True).mean().shift(-1)  
 
     fig_iznos.add_trace(go.Scatter(
-        x=region_ols_data['Year'],  # You might need to adjust the x-axis for the forecast
+        x=region_ols_data['Year'], 
         y=iznos_forecast,
         mode='lines+markers',
         name='Предсказанный износ',
-        line=dict(color='orange', dash='dash') # Example color
+        line=dict(color='orange', dash='dash')
 
     ))
 
     fig_iznos.update_layout(
         title=f'Износ для {selected_region}',
         xaxis_title='Год',
-        yaxis_title='Износ (%)',  # Or appropriate units
+        yaxis_title='Износ (%)', 
         hovermode='x unified'
     )
     with col2:
         st.plotly_chart(fig_iznos, use_container_width=False, width=600)
 
-# VDS by Industry Line Chart
 st.subheader("ВДС по индустрии (нужно выбрать регион)")
 
-if selected_region:  # Check if a region is selected
+if selected_region: 
     region_industry_data = df_pivot[df_pivot['Region'] == selected_region]
 
-    # Filter for VDS indicators (adjust this if your column names are different)
     vds_columns = [col for col in region_industry_data.columns if 'ВДС' in col and col != 'ВДС Промышленность']  # Exclude total VDS
 
     fig_vds = go.Figure()
@@ -373,14 +348,14 @@ if selected_region:  # Check if a region is selected
             x=region_industry_data['Year'],
             y=region_industry_data[industry_column],
             mode='lines+markers',
-            name=industry_column.replace('ВДС ', '')  # Remove "ВДС " for cleaner labels
+            name=industry_column.replace('ВДС ', '')  
         ))
 
     fig_vds.update_layout(
         title=f'ВДС по индустрии {selected_region}',
         xaxis_title='Год',
         yaxis_title='ВДС (mln tenge)',
-        hovermode='x unified'  # Show data for all industries at the hovered year
+        hovermode='x unified' 
     )
 
     st.plotly_chart(fig_vds, use_container_width=True)
@@ -389,29 +364,27 @@ if selected_region:  # Check if a region is selected
 ### GDP Share Bar Chart ###
 st.subheader("Доля ВВП по регионам")
 
-selected_year = st.selectbox("Выбрать год", df_pivot['Year'].unique())  # Year selection
+selected_year = st.selectbox("Выбрать год", df_pivot['Year'].unique())  
 
 gdp_share_data = df_pivot[df_pivot['Year'] == selected_year].sort_values('Доля ВВП', ascending=False)
 
 fig_gdp = go.Figure(data=[go.Bar(
     x=gdp_share_data['Region'],
     y=gdp_share_data['Доля ВВП'],
-    marker_color='skyblue' # Customize bar color
+    marker_color='skyblue' 
 )])
 
 fig_gdp.update_layout(
     title=f'Доля ВВП в {selected_year}',
     xaxis_title='Region',
     yaxis_title='GDP Share (%)',
-    xaxis={'categoryorder':'total descending'} # Sort bars in descending order
+    xaxis={'categoryorder':'total descending'} 
 )
 
 st.plotly_chart(fig_gdp, use_container_width=True)
 
-# GDP Share Over Time Line Chart
 st.subheader("Доли регионов в ВВП по годам")
 
-# Create the line chart
 fig_gdp_time = go.Figure()
 
 for region in df_pivot['Region'].unique():
@@ -420,7 +393,7 @@ for region in df_pivot['Region'].unique():
         x=region_gdp_data['Year'],
         y=region_gdp_data['Доля ВВП'],
         mode='lines+markers',
-        name=region  # Show region name in the legend
+        name=region 
     ))
 
 
@@ -428,7 +401,7 @@ fig_gdp_time.update_layout(
     title='Доля ВВП',
     xaxis_title='Год',
     yaxis_title='GDP Share (%)',
-    hovermode='x unified' # Improved hover information
+    hovermode='x unified'
 )
 
 st.plotly_chart(fig_gdp_time, use_container_width=True)
@@ -437,19 +410,16 @@ st.plotly_chart(fig_gdp_time, use_container_width=True)
 st.write("Мы также решили посчитать индекс потребности в инфраструктуре. Этот показатель позволяет оценить, какие регионы нуждаются в большем внимании в плане инфраструктуры. "
          " Он рассчитывается на основе износа, основных средств и населения каждого региона с весами 0.7, 0.2, и 0.1 соответственно. ")
 
-# Calculate Infrastructure Need Index (outside the interactive parts)
 indicators = ['Износ', 'Основные средства (балансовая)', 'Население']
-weights = {'Износ': 0.7, 'Основные средства (балансовая)': 0.2, 'Население': 0.1}  # Adjust weights as needed
+weights = {'Износ': 0.7, 'Основные средства (балансовая)': 0.2, 'Население': 0.1}  
 
 data_for_index = df_pivot[indicators].copy()
 
-# Standardize using MinMaxScaler
 scaler = MinMaxScaler()
 scaled_data = scaler.fit_transform(data_for_index)
 scaled_df = pd.DataFrame(scaled_data, columns=indicators)
 scaled_df['Infrastructure_Need_Index'] = sum([scaled_df[indicator] * weights[indicator] for indicator in indicators])
 
-# Merge the index back into df_pivot
 df_pivot = pd.merge(df_pivot, scaled_df[['Infrastructure_Need_Index']], left_index=True, right_index=True, how='left')
 
 if selected_region == "Все":
@@ -475,7 +445,6 @@ if selected_region == "Все":
 elif selected_region:
     region_data = df_pivot[df_pivot['Region'] == selected_region].copy()
 
-    # Calculate VRP Growth rate (year-over-year percentage change)
     region_data['VRP_Growth'] = region_data['ВРП Хозяйство'].pct_change() * 100
 
     fig_need_vs_vrp = go.Figure()
@@ -485,7 +454,7 @@ elif selected_region:
         y=region_data['Infrastructure_Need_Index'],
         mode='lines+markers',
         name='Infrastructure Need Index',
-        yaxis='y1'  # Assign to the left y-axis
+        yaxis='y1' 
     ))
 
     fig_need_vs_vrp.add_trace(go.Scatter(
@@ -493,8 +462,8 @@ elif selected_region:
         y=region_data['VRP_Growth'],
         mode='lines+markers',
         name='VRP Growth (%)',
-        yaxis='y2',  # Assign to the right y-axis
-        line=dict(color='red')  # Different color for right y-axis
+        yaxis='y2',  
+        line=dict(color='red')  
     ))
 
     fig_need_vs_vrp.update_layout(
@@ -505,7 +474,7 @@ elif selected_region:
             title='VRP Growth (%)',
             overlaying='y',
             side='right',
-            color='red' # Same color for axis labels and line
+            color='red'
         ),
         hovermode='x unified'
     )
