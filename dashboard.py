@@ -10,15 +10,6 @@ from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(layout="wide")
 
-def forecast_population_prophet(region_df, periods=5):
-    model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
-    model.fit(region_df[['ds', 'y']])
-    future = model.make_future_dataframe(periods=periods, freq='Y')
-    forecast = model.predict(future)
-    forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
-    forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
-    return forecast_df
-
 @st.cache_data
 def load_data():
     df = pd.read_excel('everything.xlsx')
@@ -68,14 +59,10 @@ def generate_forecasts():
     df_forecast = pd.read_csv('population_forecast.csv')
     return df_forecast
 
-def forecast_investment_gap(region_df, periods=5):
-    model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
-    model.fit(region_df[['ds', 'y']])
-    future = model.make_future_dataframe(periods=periods, freq='Y')
-    forecast = model.predict(future)
-    forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
-    forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
-    forecast_df.to_csv('invetment_gap_forecast.csv')
+def forecast_investment_gap():
+    # load from csv
+    forecast_df = pd.read_csv('investment_gap_forecast.csv')
+    forecast_df['ds'] = pd.to_datetime(forecast_df['ds'])
     return forecast_df
 
 @st.cache_data
@@ -218,7 +205,7 @@ if __name__ == "__main__":
             investment_gap_data['y'].fillna(0, inplace=True)
 
             if len(investment_gap_data.dropna()) >= 2:
-                forecast_gap = forecast_investment_gap(investment_gap_data)
+                forecast_gap = forecast_investment_gap()
                 forecast_gap['Year'] = forecast_gap['ds'].dt.year
 
                 fig_gap_all.add_trace(go.Scatter(
