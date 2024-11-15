@@ -1,13 +1,13 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
+import json
+
 from prophet import Prophet
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import statsmodels.api as sm
 from sklearn.preprocessing import MinMaxScaler
-
+import json
+import plotly.express as px
 st.set_page_config(layout="wide")
 
 @st.cache_data
@@ -52,17 +52,25 @@ def load_population():
 
     return df_population
 
-
 @st.cache_data
 def generate_forecasts():
     # load from csv
     df_forecast = pd.read_csv('population_forecast.csv')
     return df_forecast
 
-def forecast_investment_gap():
+def forecast_investment_gap(region_df, periods=5):
     # load from csv
-    forecast_df = pd.read_csv('investment_gap_forecast.csv')
-    forecast_df['ds'] = pd.to_datetime(forecast_df['ds'])
+    # forecast_df = pd.read_csv('investment_gap_forecast.csv')
+    # forecast_df['ds'] = pd.to_datetime(forecast_df['ds'])
+
+    # or
+
+    model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
+    model.fit(region_df[['ds', 'y']])
+    future = model.make_future_dataframe(periods=periods, freq='Y')
+    forecast = model.predict(future)
+    forecast_df = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy() # Keep confidence intervals
+    forecast_df['Type'] = ['Historical'] * len(region_df) + ['Forecast'] * periods
     return forecast_df
 
 @st.cache_data
@@ -77,6 +85,7 @@ if __name__ == "__main__":
     df_population = load_population()
     df_forecast = generate_forecasts()
     df_combined = merge_data(df_forecast, df_population)
+    left_margin, center_plot, right_margin = st.columns([1, 2, 1])
 
     st.title("Демографические тренды регионов Казахстана")
     st.write("Изменение населения играет важную роль в развитии регионов. Мы использовали простую модель прогнозирования для предсказания населения на будущие 5 лет (пакет prophet в Python). "
@@ -148,7 +157,7 @@ if __name__ == "__main__":
         ))
 
         fig.update_layout(
-            title=f'Статистика населения для {selected_region}',
+            title=f'Статистика населения для {selected_region} области',
             xaxis_title='Year',
             yaxis_title='Population',
             hovermode='x unified'
@@ -160,14 +169,7 @@ if __name__ == "__main__":
         if not forecast.empty:
             st.write(forecast[['Year', 'Population Forecast']])
 
-        if st.checkbox("Show Raw Data"):
-            st.subheader("Historical Population Data")
-            st.write(historical[['Year', 'Population']])
-
-            st.subheader("Forecasted Population Data")
-            st.write(forecast[['Year', 'Population Forecast']])
-
-    st.subheader("Инвестиционный разрыв и Износ")
+    st.subheader("Инвестиционный разрыв и износ")
     st.write("Мы решили ввести переменную, которую назвали Инвестиционный разрыв. Это показатель, который показывает разницу между инвестициями в основной капитал и суммой износа."
              "В свою очередь, сумма износа считается по формуле <<Наличие основных средств (начальная стоимость) * степень износа>>. "
              "По сути, это показатель чистого дефицита инвестиций для каждого региона - сумма, нужная для полного восстановления инфраструктуры. "
@@ -205,7 +207,7 @@ if __name__ == "__main__":
             investment_gap_data['y'].fillna(0, inplace=True)
 
             if len(investment_gap_data.dropna()) >= 2:
-                forecast_gap = forecast_investment_gap()
+                forecast_gap = forecast_investment_gap(investment_gap_data)
                 forecast_gap['Year'] = forecast_gap['ds'].dt.year
 
                 fig_gap_all.add_trace(go.Scatter(
@@ -272,7 +274,7 @@ if __name__ == "__main__":
         ))
 
         fig_gap_ols.update_layout(
-            title=f'Инвестиционный разрыв для {selected_region}',
+            title=f'Инвестиционный разрыв для {selected_region} области',
             xaxis_title='Year',
             yaxis_title='Investment Gap (mln KZT)',
             hovermode='x unified',
@@ -301,7 +303,7 @@ if __name__ == "__main__":
         ))
 
         fig_iznos.update_layout(
-            title=f'Износ для {selected_region}',
+            title=f'Износ для {selected_region} области',
             xaxis_title='Год',
             yaxis_title='Износ (%)',
             hovermode='x unified'
@@ -381,12 +383,12 @@ if __name__ == "__main__":
 
     st.plotly_chart(fig_gdp_time, use_container_width=True)
 
-
+    st.subheader("Infrastructure Need Index")
     st.write("Мы также решили посчитать индекс потребности в инфраструктуре. Этот показатель позволяет оценить, какие регионы нуждаются в большем внимании в плане инфраструктуры. "
-             " Он рассчитывается на основе износа, основных средств и населения каждого региона с весами 0.7, 0.2, и 0.1 соответственно. ")
+             " Он рассчитывается на основе нормализованных износа, основных средств и населения каждого региона с весами 0.85, 0.1, и 0.05 соответственно. ")
 
     indicators = ['Износ', 'Основные средства (балансовая)', 'Население']
-    weights = {'Износ': 0.7, 'Основные средства (балансовая)': 0.2, 'Население': 0.1}
+    weights = {'Износ': 0.85, 'Основные средства (балансовая)': 0.1, 'Население': 0.05}
 
     data_for_index = df_pivot[indicators].copy()
 
@@ -442,7 +444,7 @@ if __name__ == "__main__":
         ))
 
         fig_need_vs_vrp.update_layout(
-            title=f'Infrastructure Need Index vs. ВРП рост для {selected_region}',
+            title=f'Infrastructure Need Index vs. ВРП рост для {selected_region} области',
             xaxis_title='Year',
             yaxis_title='Infrastructure Need Index',
             yaxis2=dict(
@@ -455,3 +457,124 @@ if __name__ == "__main__":
         )
 
         st.plotly_chart(fig_need_vs_vrp, use_container_width=True)
+
+    # Investment Priority Index
+    st.subheader("Investment Priority Index")
+    st.write("Мы решили далее экспериментировать с возможными метриками для оценки приоритетов инвестиций в региональную инфраструктуру. Так мы решили ввести показатель, который назвали Индекс приоритета инвестиций. "
+             "Его отличие от индекса потребности в инфраструктуре в том, что он взвешен по доле ВВП региона. Таким образом, мы можем оценить, какие регионы нуждаются в большем внимании в плане инфраструктуры также являясь важной составляющей экономики.")
+
+    # Calculate Investment Priority Index (outside interactive parts)
+    df_pivot['GDP_Share_Scaled'] = MinMaxScaler().fit_transform(df_pivot[['Доля ВВП']]) 
+    df_pivot['Investment_Priority_Index'] = df_pivot['Infrastructure_Need_Index'] * df_pivot['GDP_Share_Scaled']
+
+
+    if selected_region == "Все":
+        fig_priority_all = go.Figure()
+
+        for region in df_pivot['Region'].unique():
+            region_data = df_pivot[df_pivot['Region'] == region].copy()
+
+            fig_priority_all.add_trace(go.Scatter(
+                x=region_data['Year'],
+                y=region_data['Investment_Priority_Index'],
+                mode='lines+markers',
+                name=region
+            ))
+
+        fig_priority_all.update_layout(
+            title='Investment Priority Index for All Regions',
+            xaxis_title='Year',
+            yaxis_title='Investment Priority Index',
+            hovermode='x unified'
+        )
+
+        st.plotly_chart(fig_priority_all, use_container_width=True)
+
+
+    elif selected_region:
+        region_data = df_pivot[df_pivot['Region'] == selected_region].copy()
+
+        fig_priority = go.Figure()
+
+        fig_priority.add_trace(go.Scatter(
+            x=region_data['Year'],
+            y=region_data['Investment_Priority_Index'],
+            mode='lines+markers',
+            name='Investment Priority Index'
+        ))
+
+        fig_priority.update_layout(
+            title=f'Investment Priority Index for {selected_region}',
+            xaxis_title='Year',
+            yaxis_title='Investment Priority Index',
+            hovermode='x unified'
+        )
+
+        # Change width of the figure
+        st.plotly_chart(fig_priority, use_container_width=True)
+
+    # Function to create the animated map
+    def create_animated_map(df, geojson_data, featureidkey, indicator_col):
+        fig = px.choropleth_mapbox(
+            df,
+            geojson=geojson_data,
+            locations='Region',
+            featureidkey=featureidkey,
+            color=indicator_col,
+            color_continuous_scale="Turbo",  # Customizable
+            mapbox_style="carto-positron",
+            zoom=3.2,
+            center={"lat": 50, "lon": 68},  # Approx. center of Kazakhstan
+            opacity=0.5,
+            labels={indicator_col: indicator_col},
+            animation_frame="Year",
+            height=600,
+            width=700
+        )
+        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})  # Remove margins
+        return fig
+
+    st.subheader("Степень износа по регионам в разные года")
+    st.write("Мы также решили визуализировать степень износа по регионам в разные года, а далее индекс потребности в инвестициях. "
+             "Мы выделили для себя несколько областей, которые нуждаются в большем внимании в плане дополнительных инвестиций в инфраструктуру:"
+             " Атырауская, Карагандинская, Актюбинская.")
+
+    col3, col4 = st.columns(2)
+
+    with open("kz.json", encoding="utf-8") as f:
+        geojson_data = json.load(f)
+
+    featureidkey = "properties.name"
+
+    if selected_region == "Все":
+        map_df = df_pivot.copy()
+    else:
+        map_df = df_pivot[df_pivot['Region'] == selected_region].copy()
+
+    dataframe_region_names = df_pivot['Region'].unique().tolist()
+    print("DataFrame Region Names:", dataframe_region_names)
+
+    geojson_region_names = [feature['properties']['name'] for feature in geojson_data['features']]
+    print("GeoJSON Region Names:", geojson_region_names)
+
+    if selected_region == "Все":
+        map_df_priority = df_pivot.copy()
+    else:
+        map_df_priority = df_pivot[df_pivot['Region'] == selected_region].copy()
+
+    # Ensure that Investment_Priority_Index is numeric
+    map_df_priority['Investment_Priority_Index'] = pd.to_numeric(map_df_priority['Investment_Priority_Index'], errors='coerce')
+
+    # Normalize Investment_Priority_Index
+    map_df_priority['Investment_Priority_Index'] = MinMaxScaler().fit_transform(map_df_priority[['Investment_Priority_Index']])
+
+    # Drop rows with missing values in Investment_Priority_Index
+    map_df_priority = map_df_priority.dropna(subset=['Investment_Priority_Index'])
+
+    with col3:
+        animated_fig = create_animated_map(map_df, geojson_data, featureidkey, "Износ")
+        st.plotly_chart(animated_fig, use_container_width=True)
+
+    with col4:
+        animated_fig_priority = create_animated_map(map_df_priority, geojson_data, featureidkey, "Investment_Priority_Index")
+        st.plotly_chart(animated_fig_priority, use_container_width=True)
